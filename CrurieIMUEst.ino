@@ -1,38 +1,14 @@
-/*
-  ===============================================
-  Example sketch for CurieIMU library for Intel(R) Curie(TM) devices.
-  Copyright (c) 2015 Intel Corporation.  All rights reserved.
-
-  Based on I2C device class (I2Cdev) demonstration Arduino sketch for MPU6050
-  class by Jeff Rowberg: https://github.com/jrowberg/i2cdevlib
-
-  ===============================================
-  I2Cdev device library code is placed under the MIT license
-  Copyright (c) 2011 Jeff Rowberg
-
-  Permission is hereby granted, free of charge, to any person obtaining a copy
-  of this software and associated documentation files (the "Software"), to deal
-  in the Software without restriction, including without limitation the rights
-  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-  copies of the Software, and to permit persons to whom the Software is
-  furnished to do so, subject to the following conditions:
-
-  The above copyright notice and this permission notice shall be included in
-  all copies or substantial portions of the Software.
-
-  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-  THE SOFTWARE.
-  ===============================================
-*/
-
 #include "CurieIMU.h"
+#include "est.h"
 #include "gauss.h"
 #include "kalman.h"
+#include "CurieTimerOne.h"
+
+uint32_t us = 0;
+
+void timIRQHandler() {
+  us++;
+}
 
 int ax, ay, az;         // accelerometer values
 int gx, gy, gz;         // gyrometer values
@@ -42,31 +18,20 @@ boolean blinkState = false; // state of the LED
 
 int calibrateOffsets = 1; // int to determine whether calibration takes place or not
 
-#define GAUSS_N 100
-Gauss* gauss = NULL;
-Kalman* kalman = NULL;
+#define GAUSS_N 100u
+#define KALMAN_Q 0.1f
+Est_t* est = NULL;
 void setup() {
   Serial.begin(9600); // initialize Serial communication
   while (!Serial);    // wait for the serial port to open
 
-if (gauss == NULL) {
-    gauss = GaussCreate(GAUSS_N);
-    if (gauss == NULL) {
-      Serial.println("GaussCreate() returned NULL, system pending.");
+if (est == NULL) {
+    est = Est_Create(GAUSS_N, KALMAN_Q);
+    if (est == NULL) {
+      Serial.println("Est_Create() returned NULL, system pending.");
       while(1);
     } else {
-      Serial.println("GaussCreate() done.");
-    }
-  }
-  
-  if (kalman == NULL) {
-    kalman = KalmanCreate();
-    if (kalman == NULL) {
-      GaussDestroy(gauss);
-      Serial.println("KalmanCreate() returned NULL, system pending.");
-      while(1);
-    } else {
-      Serial.println("KalmanCreate() done.");
+      Serial.println("Est_Create() done.");
     }
   }
   
@@ -137,13 +102,13 @@ if (gauss == NULL) {
   
   // configure Arduino LED for activity indicator
   pinMode(ledPin, OUTPUT);
+
+  CurieTimerOne.start(1000, &timIRQHandler);
 }
 
-#define GAUSS_PRECISION 0.5f
-#define PROC_NOISE 0.1
-bool calied = false;
+int us_last = 0;
 void loop() {
-  
+  us_last = us;
   // read raw accel/gyro measurements from device
   CurieIMU.readMotionSensor(ax, ay, az, gx, gy, gz);
 
@@ -175,34 +140,19 @@ void loop() {
   Serial.println(gz);
   */
 
-  if (calied == false) {
-    if (gauss->n < gauss->N || fabs(gauss->delta_mse) > GAUSS_PRECISION) {
-      GaussFilter(gauss, ax);
-      Serial.print("ax:\t");
-      Serial.print(ax);
-      Serial.print("\t");
-      Serial.print(gauss->mean);
-      Serial.print("\t");
-      Serial.print(gauss->mse);
-      Serial.print("\t");
-      Serial.println(gauss->delta_mse);
-    } else {
-      KalmanSetE(kalman, gauss->mean);
-      KalmanSetD(kalman, gauss->delta_mean);
-      KalmanSetQ(kalman, PROC_NOISE);
-      KalmanSetR(kalman, gauss->mse);
-      calied = true;
-      GaussDestroy(gauss);
-    }
-  }
-
-  if (calied) {
-    KalmanFilter(kalman, ax);
-    Serial.print("ax:\t");
-    Serial.print(ax);
-    Serial.print("\t");
-    Serial.println(kalman->e);
-  }
+  Est_Proc(est, ax);
+  //Serial.print("err:\t");
+  //Serial.print(est->gauss->err);
+  //Serial.print("\t");
+  //Serial.println(est->error);
+  Serial.print("ax:\t");
+  Serial.print(ax);
+  Serial.print("\t");
+  Serial.print(est->error);
+  Serial.print("\t");
+  Serial.println(est->value);
+  //Serial.print("\t");
+  //Serial.println(us-us_last);
 
   // blink LED to indicate activity
   blinkState = !blinkState;

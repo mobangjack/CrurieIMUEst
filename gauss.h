@@ -1,3 +1,19 @@
+/**
+ * Copyright (c) 2011-2016, Jack Mo (mobangjack@foxmail.com).
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #ifndef __GAUSS_H__
 #define __GAUSS_H__
 
@@ -8,8 +24,9 @@ extern "C" {
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <float.h>
 
-typedef struct Gauss
+typedef struct
 {
   /* Critical Section */
   uint16_t N; // buffer length
@@ -19,7 +36,7 @@ typedef struct Gauss
   uint16_t n; // initialization counter
   uint16_t i; // current enqueuing buffer index
   float sum;  // sum of buffer
-  float diff; // diff of sum
+  float delta_sum;  // delta of sum
   float res0; // residual of the number 0 parameter
   float resn; // residual of the number (n - 1) parameter
   float mean; // mean of buffer
@@ -30,12 +47,13 @@ typedef struct Gauss
   float mse; // mean square error
   float last_mse; // last mse
   float delta_mse; // delta mse
-}Gauss;
+  float err; // gauss err
+}Gauss_t;
 
-struct Gauss* GaussCreate(uint16_t N);
-void GaussReset(struct Gauss* gauss);
-float GaussFilter(struct Gauss* gauss, float x);
-void GaussDestroy(struct Gauss* gauss);
+Gauss_t* GaussCreate(uint16_t N);
+void GaussReset(Gauss_t* gauss);
+void GaussProc(Gauss_t* gauss, float x);
+void GaussDestroy(Gauss_t* gauss);
 
 #ifdef __cplusplus
 }
